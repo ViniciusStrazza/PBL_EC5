@@ -1,0 +1,14 @@
+﻿@model ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<h1 class="text-danger">Opa! Parece que tivemos uma complicação! :( </h1>
+<h2 class="text-danger">Entenda o que pode ter sido nas especificações abaixo:</h2>
+<br />
+<a href="/home/index">Voltar para a página inicial</a>
+<br />
+<code class="text-danger">
+    @Model.Erro
+</code>
+

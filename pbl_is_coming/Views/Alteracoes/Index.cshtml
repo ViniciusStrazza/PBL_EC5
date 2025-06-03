@@ -1,0 +1,101 @@
+﻿@using Microsoft.AspNetCore.Http
+@model List<AlteracoesViewModel>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Alterações";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <h2 class="mb-4 text-center">Alterações</h2>
+
+        <!-- Linhas de ação: Nova Alteração à esquerda e Filtros à direita -->
+        <div class="d-flex justify-content-between align-items-end mb-3">
+            @if (Context.Session.GetInt32("Admin") == 1)
+            {
+                <a asp-action="Create" class="btn btn-primary">
+                    <i class="bi bi-plus-lg"></i> Nova Alteração
+                </a>
+            }
+            <form id="filtroForm" class="row gx-2 gy-2 align-items-end">
+                <div class="col-md-5">
+                    <label for="config" class="form-label">Configuração</label>
+                    <select id="config" name="config" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <option value="MA">Malha Aberta</option>
+                        <option value="MF">Malha Fechada</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label for="data" class="form-label">Data mínima</label>
+                    <input
+                        type="date"
+                        id="data"
+                        name="data"
+                        value="@(Context.Request.Query["data"])"
+                        class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="filtrarAlteracoes()">
+                        <i class="bi bi-funnel"></i> Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tabela -->
+        <div id="tabelaAlteracoes">
+            <partial name="_TabelaAlteracoes" model="Model" />
+        </div>
+
+        <!-- Botão Voltar -->
+        <div class="d-flex justify-content-end mt-3">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Sucesso -->
+@if (TempData["Sucesso"] != null)
+{
+    <div class="modal fade" id="sucessoModal" tabindex="-1" aria-labelledby="sucessoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="sucessoModalLabel" class="modal-title">Sucesso</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    @TempData["Sucesso"]
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var sucessoModal = new bootstrap.Modal(document.getElementById('sucessoModal'));
+            sucessoModal.show();
+        });
+    </script>
+}
+
+@section Scripts {
+    <script>
+        function filtrarAlteracoes() {
+            const config = document.getElementById("config").value;
+            const data = document.getElementById("data").value;
+
+            fetch(`/Alteracoes/Filtrar?config=${config}&data=${data}`)
+                .then(resp => resp.text())
+                .then(html => {
+                    document.getElementById("tabelaAlteracoes").innerHTML = html;
+                });
+        }
+    </script>
+}

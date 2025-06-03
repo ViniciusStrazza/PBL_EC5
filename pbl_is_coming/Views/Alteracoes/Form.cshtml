@@ -1,0 +1,45 @@
+﻿@model AlteracoesViewModel
+
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = ViewBag.Operacao == "I" ? "Nova Alteração" : "Editar Alteração";
+}
+
+<div class="card shadow-sm">
+    <div class="card-body card-alteracao">
+        <h3 class="mb-4">@ViewData["Title"]</h3>
+        <form asp-action="Save" method="post">
+            <input type="hidden" name="Operacao" value="@ViewBag.Operacao" />
+
+            <div class="mb-3">
+                <label>ID</label>
+                <input asp-for="Id" class="form-control" readonly />
+            </div>
+            <div class="mb-3">
+                <label>Setpoint (°C)</label>
+                <input asp-for="Setpoint" class="form-control" />
+            </div>
+            <div class="mb-3">
+                <label>Configuração</label>
+                <select asp-for="ConfigMaMf" class="form-select">
+                    <option value="">Selecione</option>
+                    <option value="MA">MA</option>
+                    <option value="MF">MF</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label>Descrição</label>
+                <textarea asp-for="DescAlteracao" class="form-control"></textarea>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+                <a href="javascript:void(0);" class="btn btn-secondary me-2"
+                   onclick="confirmaAcao('Deseja realmente voltar? Todas as alterações não salvas serão perdidas.', function() {
+                       location.href='@Url.Action("Index", "Alteracoes")';
+                   })">
+                    Voltar
+                </a>
+                <button type="submit" class="btn btn-success">Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>

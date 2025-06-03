@@ -1,0 +1,90 @@
+﻿@using Microsoft.AspNetCore.Http
+@model List<UsuariosViewModel>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Usuários";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-10 usuario-card">
+        <h2 class="mb-3 text-center">Usuários</h2>
+
+        <div class="d-flex justify-content-between mb-3">
+            <a asp-action="Create" asp-controller="Usuarios" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Novo Usuário
+            </a>
+        </div>
+
+        <table class="table table-striped shadow-sm w-100 mx-auto">
+            <thead class="table-dark">
+                <tr>
+                    <th class="text-center align-middle">Código</th>
+                    <th class="align-middle">Nome</th>
+                    <th class="align-middle">Login</th>
+                    <th class="align-middle text-center">Administrador?</th>
+                    <th class="text-center align-middle">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td class="text-center align-middle">@item.Id</td>
+                        <td class="align-middle">@item.Nome</td>
+                        <td class="align-middle">@item.Login</td>
+                        <td class="align-middle text-center">
+                            @(item.FlagAdm ? "Sim" : "Não")
+                        </td>
+                        <td class="text-center align-middle">
+                            <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-warning">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm btn-danger"
+                                    onclick="confirmaAcao('Deseja realmente excluir este usuário?', function() {
+                                            location.href='@Url.Action("Delete", "Usuarios", new { id = item.Id })';
+                                        })">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <!-- Botão Voltar -->
+        <div class="mt-3 text-end">
+            <a asp-action="Index" asp-controller="Home" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Sucesso -->
+@if (TempData["Sucesso"] != null)
+{
+    <div class="modal fade" id="sucessoModal" tabindex="-1" aria-labelledby="sucessoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="sucessoModalLabel" class="modal-title">Sucesso</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    @TempData["Sucesso"]
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Aguarda DOM pronto e exibe o modal
+        document.addEventListener("DOMContentLoaded", function () {
+            var sucessoModal = new bootstrap.Modal(document.getElementById('sucessoModal'));
+            sucessoModal.show();
+        });
+    </script>
+}

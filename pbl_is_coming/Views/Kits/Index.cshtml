@@ -1,0 +1,104 @@
+﻿@using Microsoft.AspNetCore.Http
+@model List<KitsViewModel>
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Kits";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <h2 class="mb-4 text-center">Equipamentos</h2>
+
+        <!-- Botão "Novo Kit" à esquerda e Filtros à direita -->
+        <div class="d-flex justify-content-between align-items-end mb-3">
+            @if (Context.Session.GetInt32("Admin") == 1)
+            {
+                <a asp-action="Create" class="btn btn-primary">
+                    <i class="bi bi-plus-lg"></i> Novo Equipamento
+                </a>
+            }
+
+            <form id="filtroFormKits" class="row gx-2 gy-2 align-items-end">
+                <div class="col-md-4">
+                    <label for="situacao" class="form-label">Situação</label>
+                    <select id="situacao" name="situacao" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        <option value="Em Funcionamento">Em Funcionamento</option>
+                        <option value="Com Defeito">Com Defeito</option>
+                        <option value="Em Manutenção">Em Manutenção</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="descricao" class="form-label">Descrição contém</label>
+                    <input id="descricao"
+                           name="descricao"
+                           type="text"
+                           value="@(Context.Request.Query["descricao"])"
+                           class="form-control form-control-sm" />
+                </div>
+                <div class="col-md-4 d-grid">
+                    <button type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            onclick="filtrarKits()">
+                        <i class="bi bi-funnel"></i> Filtrar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tabela -->
+        <div id="tabelaKits">
+            <partial name="_TabelaKits" model="Model" />
+        </div>
+
+        <!-- Botão Voltar -->
+        <div class="d-flex justify-content-end mt-3">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Sucesso -->
+@if (TempData["Sucesso"] != null)
+{
+    <div class="modal fade" id="sucessoModal" tabindex="-1" aria-labelledby="sucessoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="sucessoModalLabel" class="modal-title">Sucesso</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    @TempData["Sucesso"]
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var sucessoModal = new bootstrap.Modal(document.getElementById('sucessoModal'));
+            sucessoModal.show();
+        });
+    </script>
+}
+
+@section Scripts {
+    <script>
+        function filtrarKits() {
+            const situacao = document.getElementById("situacao").value;
+            const descricao = document.getElementById("descricao").value;
+
+            fetch(`/Kits/Filtrar?situacao=${encodeURIComponent(situacao)}&descricao=${encodeURIComponent(descricao)}`)
+                .then(resp => resp.text())
+                .then(html => {
+                    document.getElementById("tabelaKits").innerHTML = html;
+                });
+        }
+    </script>
+}

@@ -1,0 +1,792 @@
+﻿@using Microsoft.AspNetCore.Http
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Painel de Controle";
+    bool logado = Context.Session.GetString("Logado") == "true";
+    bool admin = Context.Session.GetInt32("Admin") == 1;
+}
+
+<!-- =====================================================================================
+     1) Bibliotecas externas (Chart.js + Annotation + Moment.js + Adapter Moment.js)
+     ===================================================================================== -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.1/min/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.0/dist/chartjs-adapter-moment.min.js"></script>
+
+<style>
+    /* ======================================
+               Estilos Gerais
+               ====================================== */
+    body {
+        background: linear-gradient(120deg, #e6f0ff 0%, #f8fbff 80%);
+    }
+
+    .card.shadow {
+        border: none;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+    }
+
+    .card-header {
+        font-size: 1.2rem;
+        letter-spacing: 0.5px;
+        border-top-left-radius: 0.75rem;
+        border-top-right-radius: 0.75rem;
+    }
+
+    /* ======================================
+               Termômetro Horizontal
+               ====================================== */
+    #termometro-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem 1rem;
+        background-color: #fff;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.05);
+    }
+
+    #termometro {
+        position: relative;
+        width: 100%;
+        max-width: 400px;
+        height: 60px;
+        background-color: #f0f0f0;
+        border: 3px solid #bbb;
+        border-radius: 30px;
+        overflow: hidden;
+        box-shadow: inset 0 0 8px rgba(0,0,0,0.1);
+    }
+
+    #termometro-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(to right, hsl(120,100%,50%), hsl(60,100%,50%), hsl(0,100%,50%));
+        transition: width 0.5s ease, background-color 0.5s ease;
+    }
+
+    #termometro-text {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2rem;
+        font-weight: 700;
+        color: #333;
+        z-index: 2;
+        text-shadow: 1px 1px 2px rgba(255,255,255,0.7);
+    }
+
+    /* ======================================
+               Gráfico Histórico
+               ====================================== */
+    .chart-area {
+        background-color: #fff;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-top: 1rem;
+        box-shadow: inset 0 0 5px rgba(0,0,0,0.05);
+    }
+
+    #chartHistorico {
+        width: 100% !important;
+        height: 400px !important;
+    }
+
+    /* ======================================
+               Tabela de Leituras
+               ====================================== */
+    #tabelaLeituras {
+        margin-top: 2rem;
+        background-color: #fff;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.05);
+    }
+
+        #tabelaLeituras .table {
+            background-color: transparent;
+        }
+
+        #tabelaLeituras th {
+            background-color: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        #tabelaLeituras td {
+            border-color: #dee2e6;
+        }
+
+        #tabelaLeituras tr:hover {
+            background-color: #f1f7fd;
+        }
+</style>
+
+@if (!logado)
+{
+    <!-- Tela pré-login: apresentação do projeto -->
+    <div class="container my-5 section-bg">
+        <div class="text-center mb-5">
+            <h1 class="display-4 text-primary fw-bold">Projeto EC5 - Monitoramento IoT</h1>
+            <p class="lead text-secondary">Sistema de Controle Térmico Integrado com FIWARE para Estufas de Secagem</p>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card h-100 shadow-sm border-0 bg-primary text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">🎯 Objetivo</h5>
+                        <p class="card-text">Desenvolver um sistema IoT de controle térmico para estufas de secagem de motores elétricos, buscando eficiência, automação e visualização em tempo real.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 shadow-sm border-0 bg-info text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">⚙️ Funcionalidades</h5>
+                        <p class="card-text">Dashboard interativo, controle de setpoint, leitura de temperatura via ESP32, consumo de API FIWARE e visualização de dados históricos.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100 shadow-sm border-0 bg-primary text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">💡 Tecnologias</h5>
+                        <p class="card-text">ASP.NET Core MVC, MQTT, Docker, ESP32, MongoDB, FIWARE, APIs REST, controle PID, análise térmica e rede Wi-Fi local.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-5">
+            <a asp-controller="Login" asp-action="Index" class="btn btn-success btn-lg me-3">Entrar</a>
+            <a asp-controller="Usuarios" asp-action="Create" class="btn btn-primary btn-lg">Criar Conta</a>
+        </div>
+    </div>
+}
+else
+{
+    <!-- ================= Tela Pós-Login ================= -->
+    <div class="container py-4">
+        <h2 class="mb-4">Painel de Controle</h2>
+        <p>Você está logado como <strong>@(admin ? "Administrador" : "Usuário Comum")</strong>.</p>
+
+        <div class="row g-0 align-items-stretch">
+            <!-- ───── Dashboard 1: Termômetro ───── -->
+            <div class="col-md-6 mb-4">
+                <div class="card shadow h-100">
+                    <div class="card-header bg-primary text-white">Termômetro - Temperatura Atual</div>
+                    <div class="card-body d-flex align-items-center justify-content-center">
+                        <div id="termometro-container" class="w-100">
+                            <div id="termometro">
+                                <div id="termometro-fill"></div>
+                                <div id="termometro-text">--°C</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ───── Painel de Parâmetros de Controle ───── -->
+            <div class="col-md-6 mb-4">
+                <div class="card shadow h-100 d-flex flex-column">
+                    <div class="card-header bg-secondary text-white">Parâmetros de Controle</div>
+                    <div class="card-body flex-grow-1 d-flex flex-column justify-content-between">
+                        <div>
+                            <h5>Última Alteração:</h5>
+                            <div class="row mb-2">
+                                <label class="col-sm-4 form-label">Setpoint (°C):</label>
+                                <div class="col-sm-8">
+                                    <input id="txtSetpoint" class="form-control" readonly />
+                                </div>
+                            </div>
+                            <div class="row mb-2">
+                                <label class="col-sm-4 form-label">Tipo de Malha:</label>
+                                <div class="col-sm-8">
+                                    <input id="txtTipoMalha" class="form-control" readonly />
+                                </div>
+                            </div>
+                            <div class="row mb-2">
+                                <label class="col-sm-4 form-label">Temp. Inicial:</label>
+                                <div class="col-sm-8">
+                                    <input id="txtTempInicial" class="form-control" readonly />
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <label class="col-sm-4 form-label">Constante de Tempo (τ):</label>
+                                <div class="col-sm-8">
+                                    <input id="txtConstTempo" class="form-control" readonly />
+                                </div>
+                            </div>
+
+                            <!-- ───── Ganho (MA) ───── -->
+                            <div id="divMA" style="display:none;">
+                                <hr />
+                                <h5>Ganho (Malha Aberta):</h5>
+                                <div class="row mb-3">
+                                    <label class="col-sm-4 form-label">K (MA):</label>
+                                    <div class="col-sm-8">
+                                        <input id="txtGanhoMA" class="form-control" readonly />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ───── PID (MF) ───── -->
+                            <div id="divMF_Parametros" style="display:none;">
+                                <hr />
+                                <h5>Parâmetros PID (Malha Fechada):</h5>
+                                <div class="row mb-2">
+                                    <label class="col-sm-4 form-label">KP (MF):</label>
+                                    <div class="col-sm-8">
+                                        <input id="txtKpMF" type="number" step="0.01" class="form-control" placeholder="Insira o KP" />
+                                    </div>
+                                </div>
+                                <div class="row mb-2">
+                                    <label class="col-sm-4 form-label">KI (MF):</label>
+                                    <div class="col-sm-8">
+                                        <input id="txtKiMF" type="number" step="0.01" class="form-control" placeholder="Insira o KI" />
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <label class="col-sm-4 form-label">Erro Estacionário:</label>
+                                    <div class="col-sm-8">
+                                        <input id="txtErroEstacionario" class="form-control" readonly />
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <button id="btnSalvarConfigMF" class="btn btn-primary">Salvar Configuração</button>
+                                </div>
+                            </div>
+                            <!-- ───────────────────────────── -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ───── Dashboard 2: Gráfico Histórico (a partir da última alteração) ───── -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-header bg-success text-white">
+                        Histórico de Temperatura (a partir da última alteração)
+                    </div>
+                    <div class="card-body chart-area">
+                        <canvas id="chartHistorico"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ───── Tabela de Últimas Leituras ───── -->
+        <div id="tabelaLeituras">
+            <h4 class="mb-3">Últimas Leituras de Temperatura</h4>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>Data e Hora (BR)</th>
+                            <th>Temperatura (°C)</th>
+                            <th>Tensão (0–10 V)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpoTabelaLeituras">
+                        <!-- Linhas inseridas dinamicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ──────────────────────────────────────────────────────────
+        // 0) Configurar Moment.js para Português (UTC-3)
+        // ──────────────────────────────────────────────────────────
+        moment.locale('pt-br');
+
+        // ──────────────────────────────────────────────────────────
+        // VARIÁVEIS GLOBAIS
+        // ──────────────────────────────────────────────────────────
+        let maxTau = null;   // maior τ encontrado (MA e MF usam)
+        let ganhoArmazenado = null;   // ganhoma fixa (MA) — recalcular a cada histórico
+        let currentTFinal = null;   // T_final atual de todo array de leituras
+        let tempInicialFixa = null;   // armazenará T_inicial após 10s da alteração (fixo até nova alteração)
+        let ultimaAlteracaoTimestamp = null; // para detectar se a dtAlteracao mudou
+
+        // ──────────────────────────────────────────────────────────
+        // 1) ATUALIZAÇÃO DO TERMÔMETRO (a cada 1 segundo)
+        // ──────────────────────────────────────────────────────────
+        async function atualizarTermometro() {
+            try {
+                const resp = await fetch('/Home/GetCurrentTemperatureFromFiware');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const json = await resp.json();
+                const valor = json.value;
+
+                // transformar [0–100 °C] → [0%–100%]
+                const pct = Math.min(Math.max((valor / 100) * 100, 0), 100);
+                const fill = document.getElementById('termometro-fill');
+                fill.style.width = pct + '%';
+
+                // coloração: 0 °C (verde) → 100 °C (vermelho)
+                const hue = 120 - (pct * 1.2);
+                fill.style.background = `hsl(${hue}, 100%, 50%)`;
+
+                document.getElementById('termometro-text').textContent = valor.toFixed(1) + '°C';
+            }
+            catch (error) {
+                console.error('[Termômetro] Erro:', error);
+                document.getElementById('termometro-text').textContent = '--°C';
+                document.getElementById('termometro-fill').style.width = '0%';
+            }
+        }
+        atualizarTermometro();
+        setInterval(atualizarTermometro, 1000);
+
+        // ──────────────────────────────────────────────────────────
+        // 2) CONFIGURAÇÃO INICIAL DO CHART.JS (Histórico)
+        // ──────────────────────────────────────────────────────────
+        const ctx = document.getElementById('chartHistorico').getContext('2d');
+        let gradientFill = ctx.createLinearGradient(0, 0, 0, 400);
+        gradientFill.addColorStop(0, 'rgba(54,162,235,0.5)');
+        gradientFill.addColorStop(1, 'rgba(54,162,235,0)');
+
+        let dadosHist = {
+            labels: [],
+            datasets: [{
+                label: 'Temperatura (°C)',
+                data: [],
+                borderColor: 'rgb(54,162,235)',
+                backgroundColor: gradientFill,
+                fill: true,
+                tension: 0.4,
+                borderWidth: 3,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: 'rgb(54,162,235)',
+                pointBorderColor: 'rgb(255,255,255)',
+                pointBorderWidth: 2
+            }]
+        };
+
+        let configHist = {
+            type: 'line',
+            data: dadosHist,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            parser: 'YYYY-MM-DDTHH:mm:ss.SSSZ',
+                            tooltipFormat: 'DD/MM/YYYY HH:mm:ss',
+                            displayFormats: { minute: 'HH:mm' }
+                        },
+                        title: { display: true, text: 'Hora (BR)' },
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 10,
+                            font: { size: 12 }
+                        },
+                        min: null,
+                        max: null
+                    },
+                    y: {
+                        title: { display: true, text: '°C' },
+                        beginAtZero: true,
+                        min: 0,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ctx.formattedValue + ' °C'
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            // Linha vermelha do Setpoint
+                            setpointLine: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: 0,
+                                borderColor: 'rgb(220,53,69)',
+                                borderWidth: 2,
+                                borderDash: [6, 4],
+                                label: {
+                                    enabled: true,
+                                    position: 'end',
+                                    backgroundColor: 'transparent',
+                                    color: 'rgb(220,53,69)',
+                                    content: 'Setpoint: --°C (--)',
+                                    xAdjust: 0,
+                                    yAdjust: -10
+                                }
+                            },
+                            // Linhas auxiliares T₆₃ (horizontal) e t₆₃ (vertical)
+                            T63_horizontal: {
+                                type: 'line',
+                                yMin: null,
+                                yMax: null,
+                                borderColor: 'purple',
+                                borderWidth: 2,
+                                borderDash: [4, 4],
+                                label: {
+                                    enabled: true,
+                                    position: 'start',
+                                    backgroundColor: 'transparent',
+                                    color: 'purple',
+                                    content: 'T₆₃ (°C)',
+                                    xAdjust: 10
+                                }
+                            },
+                            t63_vertical: {
+                                type: 'line',
+                                xMin: null,
+                                xMax: null,
+                                borderColor: 'purple',
+                                borderWidth: 2,
+                                borderDash: [4, 4],
+                                label: {
+                                    enabled: true,
+                                    position: 'end',
+                                    backgroundColor: 'transparent',
+                                    color: 'purple',
+                                    content: 't₆₃ (HH:mm:ss)',
+                                    rotation: 90,
+                                    yAdjust: -10
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        let chartHist = new Chart(ctx, configHist);
+
+        // ──────────────────────────────────────────────────────────
+        // 2.1) Atualizar Setpoint / Detectar Nova Alteração (a cada 30s)
+        //     – Coloca “Setpoint” e “Tipo de Malha” nos campos fixos
+        //     – Define visibilidade de divMA/divMF
+        //     – Se DtAlteracao mudou, “zeramos” as variáveis globais
+        //       (tempInicialFixa, maxTau, ganhoArmazenado, KPI/KI/KD liberados)
+        // ──────────────────────────────────────────────────────────
+        async function atualizarSetpointEConfig() {
+            try {
+                const resp = await fetch('/Alteracoes/GetUltimaAlteracao');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const json = await resp.json();
+
+                const sp = json.setpoint;
+                const cfg = json.config; // “MA” ou “MF”
+                const dtAltUtc = json.dtAlteracao; // ISO 8601 UTC
+
+                // 1) Preencher Setpoint e Tipo de Malha
+                document.getElementById('txtSetpoint').value = sp.toFixed(1) + '°C';
+                document.getElementById('txtTipoMalha').value = (cfg === 'MA' ? 'Malha Aberta' : 'Malha Fechada');
+
+                // 2) Atualizar a linha vermelha do gráfico
+                const line = chartHist.options.plugins.annotation.annotations.setpointLine;
+                line.yMin = sp;
+                line.yMax = sp;
+                line.label.content = `Setpoint: ${sp.toFixed(1)}°C (${cfg === 'MA' ? 'MA' : 'MF'})`;
+                chartHist.update();
+
+                // 3) Verificar se DtAlteracao é NOVA em relação a última vez que executamos
+                if (ultimaAlteracaoTimestamp !== dtAltUtc) {
+                    // 3.1) Toda vez que detectamos NOVA alteração:
+                    //       – resetar tempInicialFixa (será calculada 10s depois),
+                    //       – resetar maxTau, ganhoArmazenado,
+                    //       – liberar campos MA/MF para edição futura.
+                    tempInicialFixa = null;
+                    maxTau = null;
+                    ganhoArmazenado = null;
+                    currentTFinal = null;
+                    document.getElementById('txtGanhoMA').value = '';
+                    document.getElementById('txtErroEstacionario').value = '';
+                    document.getElementById('txtKpMF').disabled = false;
+                    document.getElementById('txtKiMF').disabled = false;
+
+                    // guardar timestamp da alteração para comparações futuras
+                    ultimaAlteracaoTimestamp = dtAltUtc;
+                }
+
+                // 4) Exibir ou ocultar seção MA / MF
+                if (cfg === 'MA') {
+                    document.getElementById('divMA').style.display = 'block';
+                    document.getElementById('divMF_Parametros').style.display = 'none';
+                } else {
+                    document.getElementById('divMA').style.display = 'none';
+                    document.getElementById('divMF_Parametros').style.display = 'block';
+                }
+            }
+            catch (e) {
+                console.error('[Setpoint] ', e);
+            }
+        }
+        atualizarSetpointEConfig();
+        setInterval(atualizarSetpointEConfig, 30000);
+
+        // ──────────────────────────────────────────────────────────
+        // 2.2) Atualiza histórico + cálculos (a cada 1 segundo)
+        //
+        //   – GUARDA “T_inicial” como PRIMEIRA leitura a partir de
+        //     “DtAlteracao + 10s” e, após calculada, NÃO MAIS ALTERA.
+        //   – Em cada execução, calcula T_final = máximo do array.
+        //   – target63 = Math.ceil(T₀ + 0,632·(T_f − T₀)).
+        //   – Encontra t₆₃ = instante de primeira leitura ≥ target63.
+        //   – τ = t₆₃ – t₀, mas guardamos apenas o MAIOR τ já visto (maxTau).
+        //   – Desenha T₆₃ (linha horizontal) e t₆₃ (linha vertical).
+        //   – Em MA, recalcula ganho sempre: K(MA) = (T_final – T₀)/(V_final – V₀),
+        //     onde V = (T – intercept)/slope/100.
+        //   – Em MF, recolhe T_final (em currentTFinal) só para cálculo do erro
+        //     estacionário, mas NÃO recalcula ganhoMA.
+        // ──────────────────────────────────────────────────────────
+
+        // Coeficientes de regressão para converter temperatura → tensão
+        const intercept = 0.0128243214239063;
+        const slope = 0.0980856212904494;
+
+        async function atualizarHistoricoInterval() {
+            try {
+                const resp = await fetch('/Home/GetTemperatureHistoryFromLastAlteracao');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const json = await resp.json();
+
+                // 1) Extrair valores do JSON do STH‐Comet:
+                const arrayValores = json.contextResponses[0]
+                    .contextElement
+                    .attributes[0]
+                    .values || [];
+
+                // 2) Ordenar cronologicamente:
+                arrayValores.sort((a, b) => new Date(a.recvTime) - new Date(b.recvTime));
+
+                // 3) Se NÃO vier leitura, limpar tudo e sair:
+                if (!arrayValores.length) {
+                    dadosHist.labels = [];
+                    dadosHist.datasets[0].data = [];
+                    chartHist.update();
+
+                    document.getElementById('corpoTabelaLeituras').innerHTML = "";
+                    // NÃO limpamos tempInicialFixa (já está definido após +10s), mas limpamos a visualização:
+                    document.getElementById('txtTempInicial').value = '';
+                    document.getElementById('txtConstTempo').value = '';
+                    return;
+                }
+
+                // 4) Definir T_inicial: se ainda NÃO definimos, aguardamos até ter pelo menos 1 ponto com recvTime ≥ DtAlteracao+10s.
+                if (tempInicialFixa === null) {
+                    // “DtAlteracao” foi gravada em últimaAlteracaoTimestamp por atualizarSetpointEConfig().
+                    // Vamos comparar cada ponto: se ponto.recvTime UTC ≥ (DtAlteracaoUTC + 10s), então usamos attrValue.
+                    const dtAltMoment = moment(ultimaAlteracaoTimestamp).toDate(); // momento da alteração em UTC
+                    const dtLimite = moment(dtAltMoment).add(10, 'seconds');
+
+                    // procurar primeiro item cujo recvTime ≥ dtLimite
+                    for (let pt of arrayValores) {
+                        const recv = moment(pt.recvTime);
+                        if (recv.isSameOrAfter(dtLimite)) {
+                            tempInicialFixa = pt.attrValue;
+                            break;
+                        }
+                    }
+                }
+
+                // Se depois desse trecho ainda tempInicialFixa for null, significa que ainda não passaram 10s → não calculamos nada, apenas populamos gráfico e tabela e voltamos.
+                if (tempInicialFixa === null) {
+                    // Ainda não chegou o momento “+10s”, então apenas preencher tabela e gráfico sem cálculos de TAU ou ganho:
+                    preencherGraficoETabelaSomenteLeituras(arrayValores);
+                    return;
+                }
+
+                // 5) Agora que tempInicialFixa foi definido, não alteramos mais.
+                //    Exibir em “Temp. Inicial”
+                document.getElementById('txtTempInicial').value = tempInicialFixa.toFixed(1) + '°C';
+
+                // 6) Calcular T_final = máximo de todas as leituras
+                const T_final = Math.max(...arrayValores.map(pt => pt.attrValue));
+                currentTFinal = T_final; // guardamos para MF
+
+                // 7) Cálculo de target63 (arredondado para cima):
+                const deltaTotal = T_final - tempInicialFixa;
+                const target63 = Math.ceil(tempInicialFixa + 0.632 * deltaTotal);
+
+                // 8) Encontrar índice de t₀ (onde attrValue == T_inicialFixa e recvTime ≥ DtAlteracao+10s)
+                //    Já sabemos qual foi o primeiro valor ≥ DtAlteracao+10s que deu T_inicialFixa, mas podemos buscar de novo:
+                const idxInicial = arrayValores.findIndex(pt => pt.attrValue === tempInicialFixa &&
+                    moment(pt.recvTime).isSameOrAfter(moment(ultimaAlteracaoTimestamp).add(2.5, 'seconds'))
+                );
+                const t0 = idxInicial >= 0
+                    ? moment(arrayValores[idxInicial].recvTime)
+                    : null;
+
+                // 9) Encontrar t₆₃: primeiro ponto cujo attrValue ≥ target63
+                let tauSegundos = null;
+                let t63Date = null;
+                if (t0) {
+                    for (let item of arrayValores) {
+                        if (item.attrValue >= target63) {
+                            const t1 = moment(item.recvTime);
+                            tauSegundos = t1.diff(t0, 'seconds', true);
+                            t63Date = moment(item.recvTime).utcOffset(-180).toDate();
+                            break;
+                        }
+                    }
+                }
+
+                // 10) Atualizar maxTau se τ calculado for maior:
+                if (tauSegundos !== null && (maxTau === null || tauSegundos > maxTau)) {
+                    maxTau = tauSegundos;
+                }
+
+                // 11) Exibir o maior τ até agora:
+                if (maxTau !== null) {
+                    document.getElementById('txtConstTempo').value = maxTau.toFixed(1) + ' s';
+                } else {
+                    document.getElementById('txtConstTempo').value = '--';
+                }
+
+                // 12) Verificar tipo de malha e calcular Ganho (MA) toda vez:
+                const tipoMalha = document.getElementById('txtTipoMalha').value;
+                if (tipoMalha === 'Malha Aberta') {
+                    // Em MA, sempre recalcular: K(MA) = (T_final − T_inicialFixa)/(V_final − V_inicial)
+                    const V_inicial = (tempInicialFixa - intercept) / slope / 100;
+                    const V_final = (T_final - intercept) / slope / 100;
+                    const deltaV = V_final - V_inicial;
+                    const deltaT = T_final - tempInicialFixa;
+                    if (deltaV !== 0) {
+                        ganhoArmazenado = deltaT / deltaV;
+                        document.getElementById('txtGanhoMA').value = ganhoArmazenado.toFixed(3);
+                    } else {
+                        document.getElementById('txtGanhoMA').value = '--';
+                    }
+                } else {
+                    // Em MF não mostramos GanhoMA
+                    document.getElementById('txtGanhoMA').value = '';
+                }
+
+                // 13) Limpar gráfico e tabela para refazer preenchimento
+                dadosHist.labels = [];
+                dadosHist.datasets[0].data = [];
+                const tabela = document.getElementById('corpoTabelaLeituras');
+                tabela.innerHTML = "";
+
+                // 14) Preencher gráfico e tabela
+                arrayValores.forEach(item => {
+                    const timeUtc = item.recvTime;   // ex: "2025-06-01T17:31:00.123Z"
+                    const tempC = item.attrValue;  // ex: 29.5°
+
+                    // 14a) Converter UTC → BR e formatar “DD/MM/YYYY - HH:mm:ss”
+                    const localBR = moment(timeUtc).utcOffset(-180).format('DD/MM/YYYY - HH:mm:ss');
+                    const dateObj = moment(timeUtc).utcOffset(-180).toDate();
+
+                    // 14b) Calcular tensão (0–10 V), mantendo “/100”
+                    let tensao = (tempC - intercept) / slope / 100;
+                    tensao = parseFloat(tensao.toFixed(3));
+
+                    // 14c) Preencher Tabela (inserir no topo)
+                    const tr = document.createElement('tr');
+                    const td1 = document.createElement('td'); td1.textContent = localBR;
+                    const td2 = document.createElement('td'); td2.textContent = tempC.toFixed(1);
+                    const td3 = document.createElement('td'); td3.textContent = tensao.toFixed(3);
+                    tr.append(td1, td2, td3);
+                    tabela.insertBefore(tr, tabela.firstChild);
+
+                    // 14d) Preencher Gráfico (só temperatura)
+                    dadosHist.labels.push(dateObj);
+                    dadosHist.datasets[0].data.push(tempC);
+                });
+
+                // 15) Desenhar linhas T₆₃ e t₆₃
+                if (t63Date && target63 !== null) {
+                    const ann = chartHist.options.plugins.annotation.annotations;
+
+                    // – Linha horizontal em y = target63 (T₆₃)
+                    ann.T63_horizontal.yMin = target63;
+                    ann.T63_horizontal.yMax = target63;
+                    ann.T63_horizontal.label.content = `T₆₃ = ${target63}°C`;
+                    ann.T63_horizontal.label.xAdjust = 0;
+                    ann.T63_horizontal.label.yAdjust = -10;
+
+                    // – Linha vertical em x = t63Date (t₆₃)
+                    ann.t63_vertical.xMin = t63Date;
+                    ann.t63_vertical.xMax = t63Date;
+                    ann.t63_vertical.label.content = `t₆₃ = ${moment(t63Date).format('HH:mm:ss')}`;
+                    ann.t63_vertical.label.xAdjust = 10;
+                    ann.t63_vertical.label.yAdjust = -10;
+                }
+
+                // 16) “Repetir” último valor no gráfico até o momento atual
+                if (dadosHist.labels.length > 0) {
+                    const lastValue = dadosHist.datasets[0].data.at(-1);
+                    const nowBR = moment().utcOffset(-180).toDate();
+                    dadosHist.labels.push(nowBR);
+                    dadosHist.datasets[0].data.push(lastValue);
+
+                    // Ajustar min/max eixo X
+                    const firstDate = dadosHist.labels[0];
+                    chartHist.options.scales.x.min = firstDate;
+                    chartHist.options.scales.x.max = nowBR;
+                }
+
+                // 17) Atualizar o gráfico
+                chartHist.update();
+            }
+            catch (err) {
+                console.error('[Histórico] ', err);
+            }
+        }
+        atualizarHistoricoInterval();
+        setInterval(atualizarHistoricoInterval, 1000);
+
+        // ──────────────────────────────────────────────────────────
+        // 3) Malha Fechada: Listener para “Salvar Configuração”
+        //    – Só depois que o usuário clicar, calcular o Erro Estacionário
+        //      = (Setpoint – T_final) × KP, e travar KP/KI até próxima alteração.
+        // ──────────────────────────────────────────────────────────
+        document.getElementById('btnSalvarConfigMF').addEventListener('click', function () {
+            const kpText = document.getElementById('txtKpMF').value;
+            const kp = parseFloat(kpText);
+            const kiText = document.getElementById('txtKiMF').value;
+            const ki = parseFloat(kiText);
+            const spText = document.getElementById('txtSetpoint').value;
+            const sp = parseFloat(spText);
+
+            // Validação mínima: KP deve ser número válido e currentTFinal já definido
+            if (!isNaN(kp) && currentTFinal !== null && !isNaN(sp)) {
+                // Erro estacionário: (SP − T_final) × KP
+                const erroEst = (sp - currentTFinal) * kp;
+                document.getElementById('txtErroEstacionario').value = erroEst.toFixed(1) + '°C';
+
+                // Travar KP e KI (já que usuário acabou de “salvar” a configuração)
+                document.getElementById('txtKpMF').disabled = true;
+                document.getElementById('txtKiMF').disabled = true;
+            } else {
+                // Se kp inválido ou currentTFinal ainda não calculado, não calcular
+                alert("Informe um valor válido de KP e aguarde o T_final ser calculado.");
+            }
+        });
+
+        // Atualização dinâmica do erro estacionário ao digitar KP
+        document.getElementById('txtKpMF').addEventListener('input', function () {
+            const kp = parseFloat(this.value);
+            const sp = parseFloat(document.getElementById('txtSetpoint').value);
+            if (!isNaN(kp) && currentTFinal !== null && !isNaN(sp)) {
+                const erroEst = (sp - currentTFinal) * kp;
+                document.getElementById('txtErroEstacionario').value = erroEst.toFixed(1) + '°C';
+            } else {
+                document.getElementById('txtErroEstacionario').value = '';
+            }
+        });
+
+    </script>
+}

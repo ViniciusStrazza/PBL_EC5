@@ -1,0 +1,85 @@
+﻿@using Microsoft.AspNetCore.Http
+@model KitsViewModel
+
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = ViewBag.Operacao == "I" ? "Novo Kit" : "Editar Kit";
+}
+
+<div class="card shadow-sm">
+    <div class="card-body card-kit">
+        <h3 class="mb-4">@ViewData["Title"]</h3>
+
+        <form asp-controller="Kits" asp-action="Save" method="post" enctype="multipart/form-data">
+            <!-- TOKEN de antifalsificação -->
+            @Html.AntiForgeryToken()
+
+            <!-- NOME “Operacao” obrigatório para o PadraoController -->
+            <input type="hidden" name="Operacao" value="@ViewBag.Operacao" />
+
+            <div class="mb-3">
+                <label>ID</label>
+                <input asp-for="Id" class="form-control" readonly />
+            </div>
+
+            <div class="mb-3">
+                <label>Nome</label>
+                <textarea asp-for="Nome" class="form-control"></textarea>
+                <span asp-validation-for="Nome" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label>Situação</label>
+                <select asp-for="Situacao" class="form-select">
+                    <option value="">Selecione</option>
+                    <option value="Em Manutenção">Em Manutenção</option>
+                    <option value="Com Defeito">Com Defeito</option>
+                    <option value="Em Funcionamento">Em Funcionamento</option>
+                </select>
+                <span asp-validation-for="Situacao" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label>Última Manutenção</label>
+                <input asp-for="DtLastMainte" type="date" class="form-control" />
+                <span asp-validation-for="DtLastMainte" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label>Descrição</label>
+                <textarea asp-for="DescEquip" class="form-control"></textarea>
+                <span asp-validation-for="DescEquip" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label>Preço</label>
+                <input asp-for="PrecoEquip" type="number" step="0.01" class="form-control" />
+                <span asp-validation-for="PrecoEquip" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label>Imagem <span class="text-danger">*</span></label>
+                <input asp-for="ImagemUpload" type="file" class="form-control" />
+                <span asp-validation-for="ImagemUpload" class="text-danger"></span>
+            </div>
+
+            @if (ViewBag.Operacao == "A" && Model.Imagem != null)
+            {
+                <div class="mb-3">
+                    <label>Imagem Atual</label><br />
+                    <img src="data:image/png;base64,@Convert.ToBase64String(Model.Imagem)"
+                         class="img-thumbnail" style="max-height:200px;" />
+                </div>
+            }
+
+            <div class="d-flex justify-content-end mt-3">
+                <a asp-action="Index" class="btn btn-secondary me-2">
+                    <i class="bi bi-arrow-left"></i> Voltar
+                </a>
+                <button type="submit" class="btn btn-success">
+                    Salvar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

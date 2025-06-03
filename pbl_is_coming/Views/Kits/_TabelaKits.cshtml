@@ -1,0 +1,67 @@
+﻿@using Microsoft.AspNetCore.Http
+@model List<KitsViewModel>
+
+<table class="table table-striped shadow-sm w-100 mx-auto">
+    <thead class="table-dark">
+        <tr>
+            <th class="text-center align-middle">Código</th>
+            <th class="text-center align-middle">Nome</th>
+            <th class="text-center align-middle">Situação</th>
+            <th class="text-center align-middle">Últ. Manutenção</th>
+            <th class="text-center align-middle">Descrição</th>
+            <th class="text-center align-middle">Preço</th>
+            <th class="text-center align-middle">Imagem</th>
+            @if (Context.Session.GetInt32("Admin") == 1)
+            {
+                <th class="text-center align-middle">Ações</th>
+            }
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var k in Model)
+        {
+            <tr>
+                <td class="text-center align-middle">@k.Id</td>
+                <td class="text-center align-middle">@k.Nome</td>
+                <td class="text-center align-middle">@k.Situacao</td>
+                <td class="text-center align-middle">
+                    @(k.DtLastMainte?.ToString("dd/MM/yyyy") ?? "-")
+                </td>
+                <td class="text-center align-middle">@k.DescEquip</td>
+                <td class="text-center align-middle">@k.PrecoEquip.ToString("C")</td>
+                <td class="text-center align-middle">
+                    @if (k.Imagem != null && k.Imagem.Length > 0)
+                    {
+                        var base64 = Convert.ToBase64String(k.Imagem);
+                        var imgSrc = $"data:image/png;base64,{base64}";
+                        <img src="@imgSrc"
+                             alt="Imagem Kit"
+                             style="max-height: 80px;"
+                             class="rounded shadow-sm" />
+                    }
+                    else
+                    {
+                        <span class="text-muted">Sem imagem</span>
+                    }
+                </td>
+                @if (Context.Session.GetInt32("Admin") == 1)
+                {
+                    <td class="text-center align-middle">
+                        <a asp-action="Edit"
+                           asp-route-id="@k.Id"
+                           class="btn btn-sm btn-warning">
+                            <i class="bi bi-pencil-square"></i>
+                        </a>
+                        <button type="button"
+                                class="btn btn-sm btn-danger"
+                                onclick="confirmaAcao('Confirma exclusão deste kit?', function() {
+                                                    location.href='@Url.Action("Delete", "Kits", new { id = k.Id })';
+                                                })">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>

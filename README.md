@@ -26,7 +26,7 @@ Este é um sistema web ASP.NET MVC desenvolvido com propósito didático e funci
 - Cadastro de alterações de temperatura (setpoint) com:
   - Validação de faixa permitida (0°C a 100°C).
   - Identificação do usuário responsável.
-  - Escolha entre modos **MA** (Manual) e **MF** (Modo Fixo).
+  - Escolha entre modos **MA** (Malha Aberta) e **MF** (Malha Fechada).
   - Descrição personalizada da alteração.
 - Visualização de histórico com filtros dinâmicos por data e configuração.
 

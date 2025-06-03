@@ -1,6 +1,6 @@
 # 🌡️ SECA LINK: Sistema de Controle de Setpoints e Kits com FIWARE
 
-Este é um sistema web ASP.NET MVC desenvolvido com propósito didático e funcional para controle de alterações de setpoint de temperatura, gerenciamento de kits e usuários. A aplicação também integra com a plataforma **FIWARE** para controle remoto de temperatura (via HTTP e/ou MQTT). Desenvolvido para ambientes acadêmicos e laboratoriais.
+Este é um sistema web ASP.NET MVC desenvolvido com propósito didático e funcional para controle de alterações de setpoint de temperatura, gerenciamento de kits e usuários. A aplicação também integra com a plataforma **FIWARE** para controle remoto de temperatura (via MQTT). Desenvolvido para ambientes acadêmicos e laboratoriais.
 
 ## 📌 Funcionalidades
 

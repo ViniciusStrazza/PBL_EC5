@@ -31,10 +31,10 @@ Este é um sistema web ASP.NET MVC desenvolvido com propósito didático e funci
 - Visualização de histórico com filtros dinâmicos por data e configuração.
 
 ### 📡 Integração com FIWARE
-- Integração planejada via **protocolo HTTP e/ou MQTT** com a plataforma FIWARE para:
-  - Envio de dados de setpoint.
-  - Recebimento e exibição de temperatura atual.
-- O sistema é ideal para exibir dashboards com dados em tempo real provenientes de sensores conectados a FIWARE (usualmente hospedado em VM na AWS).
+- Integração planejada via **protocolo MQTT** com a plataforma FIWARE para:
+  - Recebimento e exibição de temperatura atual;
+  - Recebimento e exibição de temperatura histórica, considerando a data de alteração mais recente (integrado com o CRUD!);
+- O sistema é ideal para exibir dashboards com dados em tempo real provenientes de sensores conectados a FIWARE (hospedado em VM na AWS).
 
 ### 📊 Interface Amigável
 - _Layout_ padronizado com renderização de menus personalizados conforme tipo de usuário.
@@ -51,9 +51,11 @@ Este é um sistema web ASP.NET MVC desenvolvido com propósito didático e funci
 - **DAO:** Acesso ao banco via stored procedures (Insert, Update, Delete, Consulta, Listagem).
 - **Views:** Páginas HTML organizadas em pastas por funcionalidade (com _Layout_ compartilhado).
 
-### 📁 Estrutura de Pastas das Views
+---
 
-```text
+## 📁 Estrutura de Pastas das Views
+
+```
 Views/
 ├── Shared/        => Layout padrão, mensagens de erro, etc.
 ├── Login/         => Tela de autenticação
@@ -61,17 +63,7 @@ Views/
 ├── Alteracoes/    => Controle de setpoints
 ├── Kits/          => Gerenciamento de equipamentos
 ├── Home/          => Página inicial com dashboard e temperatura atual
-
----
-
-## 🧪 Tecnologias Utilizadas
-
-- ASP.NET Core MVC
-- C# com Entity-Like Pattern (DAO customizado com Stored Procedures)
-- SQL Server (banco de dados relacional)
-- Bootstrap 4+
-- AJAX para filtros assíncronos
-- FIWARE (HTTP/MQTT - integração com sensores e atuadores)
+```
 
 ---
 
@@ -81,9 +73,9 @@ Views/
 |-------------------------|---------------|---------------|
 | Login                   | ✅            | ✅           |
 | Cadastro                | ✅            | ✅           |
-| Criar alteração         | ✅            | ✅           |
 | Visualizar kits         | ✅            | ✅           |
 | Filtrar dados           | ✅            | ✅           |
+| Criar alteração         | ❌            | ✅           |
 | Editar/Excluir kits     | ❌            | ✅           |
 | Editar/Excluir usuários | ❌            | ✅           |
 | Listagem de usuários    | ❌            | ✅           |
@@ -92,29 +84,29 @@ Views/
 
 ## 💾 Banco de Dados
 
-### Stored Procedures Esperadas:
-- `spInsert_[tabela]`, `spUpdate_[tabela]`, `spDelete`
-- `spConsulta`, `spProximoId`, `spListagem[tabela]`
-- `spConsultaPorLogin`
+### Funcional, com Stored Procedures
+- Utiliza procedures (`spInsert`, `spUpdate`, `spDelete`, etc.) para garantir segurança (evita SQL Injection) e desempenho no acesso aos dados.
 
-### Tabelas:
-- **Usuarios:** `id`, `nome_usuario`, `login_usuario`, `senha_usuario`, `flag_admin`
-- **Kits:** `id`, `nome`, `situacao`, `data_ultima_manutencao`, `descricao_equipamento`, `preco_equipamento`, `imagem`
-- **Alteracoes:** `id`, `id_usuario`, `data_alteracao`, `setpoint`, `config_ma_mf`, `descricao_alteracao`
+### Tabelas
+- Estruturadas com relacionamentos lógicos entre usuários, kits e alterações.
+- Suporte à recuperação de identidade, listagens ordenadas e consultas filtradas.
 
 ---
 
 ## 🚀 Como Rodar o Projeto
 
-1. Configure o banco de dados SQL Server conforme a connection string:
+1. Configure o banco de dados SQL Server conforme a `connection string`:
 ```csharp
-Data Source=(Seu banco de dados); Database=(nome do seu datasabe); user id=(seu id); password=(sua senha);
+Data Source=(Seu servidor banco de dados); Database=(nome do seu database); user id=(seu id); password=(sua senha);
+```
 
-2. Crie as stored procedures e tabelas mencionadas;
+2. Crie as stored procedures e tabelas mencionadas (vide arquivo `query_cruds.sql`).
 
 3. Compile o projeto no Visual Studio.
 
-Execute e acesse via navegador em: http://localhost:xxxx
+4. Execute e acesse via navegador em: `http://localhost:xxxx`. (quando _hosteado_ em nuvem)
+
+---
 
 ## 👨‍💻 Autores
 
@@ -122,3 +114,7 @@ Execute e acesse via navegador em: http://localhost:xxxx
 - 💻 **Arthur Destro Gabrielli**
 - 🛠️ **Gustavo Mauriz Silva**
 - 🔬 **Vinicius Strazza Santos**
+
+---
+
+Projeto desenvolvido com foco educacional, integrando conceitos de IoT, automação e sistemas supervisórios com tecnologias modernas da web.

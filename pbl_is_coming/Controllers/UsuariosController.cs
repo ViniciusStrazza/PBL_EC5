@@ -48,20 +48,27 @@ namespace pbl_is_coming.Controllers
             return base.Delete(id);
         }
 
-        // Save: define TempData e delega para PadraoController
+        // **Save: define TempData e delega para PadraoController, mas redireciona de volta ao Form em I**
         public override IActionResult Save(UsuariosViewModel model, string operacao)
         {
             if (operacao == "I")
             {
+                // Criação de um novo usuário (sem precisar estar logado)
                 model.FlagAdm = false;
+                DAO.Insert(model);
+
+                // Mensagem de sucesso
                 TempData["Sucesso"] = "Usuário criado com sucesso!";
+
+                // ← Em vez de ir para Index (que é protegido), voltamos ao próprio Create(Form)
+                return RedirectToAction("Create", "Usuarios");
             }
             else
             {
+                // Atualização — só admins chegam aqui
                 TempData["Sucesso"] = "Usuário atualizado com sucesso!";
+                return base.Save(model, operacao);
             }
-
-            return base.Save(model, operacao);
         }
 
         protected override void ValidaDados(UsuariosViewModel model, string operacao)

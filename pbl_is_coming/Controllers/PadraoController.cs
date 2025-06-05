@@ -128,16 +128,21 @@ namespace pbl_is_coming.Controllers
                 return View("Error", new ErrorViewModel(erro.ToString()));
             }
         }
-
         public override void OnActionExecuting(ActionExecutingContext context)
         {
-            if (ExigeAutenticacao && !HelperControllers.VerificaUserLogado(HttpContext.Session))
-                context.Result = RedirectToAction("Index", "Login");
-            else
+            // Se exige autenticação e o usuário NÃO está logado,
+            // mas há mensagem de sucesso pendente em TempData, deixamos continuar.
+            if (ExigeAutenticacao
+                && !HelperControllers.VerificaUserLogado(HttpContext.Session)
+                && TempData["Sucesso"] == null)
             {
-                ViewBag.Logado = true;
-                base.OnActionExecuting(context);
+                context.Result = RedirectToAction("Index", "Login");
+                return;
             }
+
+            ViewBag.Logado = true;
+            base.OnActionExecuting(context);
         }
+
     }
 }

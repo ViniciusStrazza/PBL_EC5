@@ -259,6 +259,9 @@ else
                                     </div>
                                 </div>
                                 <div class="text-end">
+                                    <button id="btnMudarConfigMF" class="btn btn-secondary" style="display: none; margin-left: 10px;">
+                                        Mudar configuração
+                                    </button>
                                     <button id="btnSalvarConfigMF" class="btn btn-primary">Salvar Configuração</button>
                                 </div>
                             </div>
@@ -304,480 +307,553 @@ else
     </div>
 
     <script>
-        // ──────────────────────────────────────────────────────────
-        // 0) Configurar Moment.js para Português (UTC-3)
-        // ──────────────────────────────────────────────────────────
-        moment.locale('pt-br');
+    // ──────────────────────────────────────────────────────────
+    // 0) Configurar Moment.js para Português (UTC-3)
+    // ──────────────────────────────────────────────────────────
+    moment.locale('pt-br');
 
-        // ──────────────────────────────────────────────────────────
-        // VARIÁVEIS GLOBAIS
-        // ──────────────────────────────────────────────────────────
-        let maxTau = null;   // maior τ encontrado (MA e MF usam)
-        let ganhoArmazenado = null;   // ganhoma fixa (MA) — recalcular a cada histórico
-        let currentTFinal = null;   // T_final atual de todo array de leituras
-        let tempInicialFixa = null;   // armazenará T_inicial após 10s da alteração (fixo até nova alteração)
-        let ultimaAlteracaoTimestamp = null; // para detectar se a dtAlteracao mudou
+    // ──────────────────────────────────────────────────────────
+    // VARIÁVEIS GLOBAIS
+    // ──────────────────────────────────────────────────────────
+    let maxTau = null;                  // maior τ encontrado (MA e MF usam)
+    let ganhoArmazenado = null;         // ganhoMA fixa (MA) — recalcular a cada histórico
+    let currentTFinal = null;           // T_final atual de todo array de leituras
+    let tempInicialFixa = null;         // armazenará T_inicial após 10s da alteração (fixo até nova alteração)
+    let ultimaAlteracaoTimestamp = null;// para detectar se a dtAlteracao mudou
 
-        // ──────────────────────────────────────────────────────────
-        // 1) ATUALIZAÇÃO DO TERMÔMETRO (a cada 1 segundo)
-        // ──────────────────────────────────────────────────────────
-        async function atualizarTermometro() {
-            try {
-                const resp = await fetch('/Home/GetCurrentTemperatureFromFiware');
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const json = await resp.json();
-                const valor = json.value;
+    // NOVAS VARIÁVEIS PARA MALHA FECHADA
+    let savedKP = null;                 // KP salvo ao clicar em “Salvar Configuração”
+    let savedKI = null;                 // KI salvo (caso queira persistir)
+    let isConfigLocked = false;         // indica se a configuração está bloqueada
 
-                // transformar [0–100 °C] → [0%–100%]
-                const pct = Math.min(Math.max((valor / 100) * 100, 0), 100);
-                const fill = document.getElementById('termometro-fill');
-                fill.style.width = pct + '%';
+    // ──────────────────────────────────────────────────────────
+    // 1) ATUALIZAÇÃO DO TERMÔMETRO (a cada 1 segundo)
+    // ──────────────────────────────────────────────────────────
+    async function atualizarTermometro() {
+        try {
+            const resp = await fetch('/Home/GetCurrentTemperatureFromFiware');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const json = await resp.json();
+            const valor = json.value;
 
-                // coloração: 0 °C (verde) → 100 °C (vermelho)
-                const hue = 120 - (pct * 1.2);
-                fill.style.background = `hsl(${hue}, 100%, 50%)`;
+            // transformar [0–100 °C] → [0%–100%]
+            const pct = Math.min(Math.max((valor / 100) * 100, 0), 100);
+            const fill = document.getElementById('termometro-fill');
+            fill.style.width = pct + '%';
 
-                document.getElementById('termometro-text').textContent = valor.toFixed(1) + '°C';
-            }
-            catch (error) {
-                console.error('[Termômetro] Erro:', error);
-                document.getElementById('termometro-text').textContent = '--°C';
-                document.getElementById('termometro-fill').style.width = '0%';
-            }
+            // coloração: 0 °C (verde) → 100 °C (vermelho)
+            const hue = 120 - (pct * 1.2);
+            fill.style.background = `hsl(${hue}, 100%, 50%)`;
+
+            document.getElementById('termometro-text').textContent = valor.toFixed(1) + '°C';
         }
-        atualizarTermometro();
-        setInterval(atualizarTermometro, 1000);
+        catch (error) {
+            console.error('[Termômetro] Erro:', error);
+            document.getElementById('termometro-text').textContent = '--°C';
+            document.getElementById('termometro-fill').style.width = '0%';
+        }
+    }
+    atualizarTermometro();
+    setInterval(atualizarTermometro, 1000);
 
-        // ──────────────────────────────────────────────────────────
-        // 2) CONFIGURAÇÃO INICIAL DO CHART.JS (Histórico)
-        // ──────────────────────────────────────────────────────────
-        const ctx = document.getElementById('chartHistorico').getContext('2d');
-        let gradientFill = ctx.createLinearGradient(0, 0, 0, 400);
-        gradientFill.addColorStop(0, 'rgba(54,162,235,0.5)');
-        gradientFill.addColorStop(1, 'rgba(54,162,235,0)');
+    // ──────────────────────────────────────────────────────────
+    // 2) CONFIGURAÇÃO INICIAL DO CHART.JS (Histórico)
+    // ──────────────────────────────────────────────────────────
+    const ctx = document.getElementById('chartHistorico').getContext('2d');
+    let gradientFill = ctx.createLinearGradient(0, 0, 0, 400);
+    gradientFill.addColorStop(0, 'rgba(54,162,235,0.5)');
+    gradientFill.addColorStop(1, 'rgba(54,162,235,0)');
 
-        let dadosHist = {
-            labels: [],
-            datasets: [{
-                label: 'Temperatura (°C)',
-                data: [],
-                borderColor: 'rgb(54,162,235)',
-                backgroundColor: gradientFill,
-                fill: true,
-                tension: 0.4,
-                borderWidth: 3,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                pointBackgroundColor: 'rgb(54,162,235)',
-                pointBorderColor: 'rgb(255,255,255)',
-                pointBorderWidth: 2
-            }]
-        };
+    let dadosHist = {
+        labels: [],
+        datasets: [{
+            label: 'Temperatura (°C)',
+            data: [],
+            borderColor: 'rgb(54,162,235)',
+            backgroundColor: gradientFill,
+            fill: true,
+            tension: 0.4,
+            borderWidth: 3,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: 'rgb(54,162,235)',
+            pointBorderColor: 'rgb(255,255,255)',
+            pointBorderWidth: 2
+        }]
+    };
 
-        let configHist = {
-            type: 'line',
-            data: dadosHist,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        type: 'time',
-                        time: {
-                            parser: 'YYYY-MM-DDTHH:mm:ss.SSSZ',
-                            tooltipFormat: 'DD/MM/YYYY HH:mm:ss',
-                            displayFormats: { minute: 'HH:mm' }
-                        },
-                        title: { display: true, text: 'Hora (BR)' },
-                        ticks: {
-                            autoSkip: true,
-                            maxTicksLimit: 10,
-                            font: { size: 12 }
-                        },
-                        min: null,
-                        max: null
+    let configHist = {
+        type: 'line',
+        data: dadosHist,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        parser: 'YYYY-MM-DDTHH:mm:ss.SSSZ',
+                        tooltipFormat: 'DD/MM/YYYY HH:mm:ss',
+                        displayFormats: { minute: 'HH:mm' }
                     },
-                    y: {
-                        title: { display: true, text: '°C' },
-                        beginAtZero: true,
-                        min: 0,
-                        max: 100
+                    title: { display: true, text: 'Hora (BR)' },
+                    ticks: {
+                        autoSkip: true,
+                        maxTicksLimit: 10,
+                        font: { size: 12 }
+                    },
+                    min: null,
+                    max: null
+                },
+                y: {
+                    title: { display: true, text: '°C' },
+                    beginAtZero: true,
+                    min: 0,
+                    max: 100
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.formattedValue + ' °C'
                     }
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => ctx.formattedValue + ' °C'
-                        }
-                    },
-                    annotation: {
-                        annotations: {
-                            // Linha vermelha do Setpoint
-                            setpointLine: {
-                                type: 'line',
-                                yMin: 0,
-                                yMax: 0,
-                                borderColor: 'rgb(220,53,69)',
-                                borderWidth: 2,
-                                borderDash: [6, 4],
-                                label: {
-                                    enabled: true,
-                                    position: 'end',
-                                    backgroundColor: 'transparent',
-                                    color: 'rgb(220,53,69)',
-                                    content: 'Setpoint: --°C (--)',
-                                    xAdjust: 0,
-                                    yAdjust: -10
-                                }
-                            },
-                            // Linhas auxiliares T₆₃ (horizontal) e t₆₃ (vertical)
-                            T63_horizontal: {
-                                type: 'line',
-                                yMin: null,
-                                yMax: null,
-                                borderColor: 'purple',
-                                borderWidth: 2,
-                                borderDash: [4, 4],
-                                label: {
-                                    enabled: true,
-                                    position: 'start',
-                                    backgroundColor: 'transparent',
-                                    color: 'purple',
-                                    content: 'T₆₃ (°C)',
-                                    xAdjust: 10
-                                }
-                            },
-                            t63_vertical: {
-                                type: 'line',
-                                xMin: null,
-                                xMax: null,
-                                borderColor: 'purple',
-                                borderWidth: 2,
-                                borderDash: [4, 4],
-                                label: {
-                                    enabled: true,
-                                    position: 'end',
-                                    backgroundColor: 'transparent',
-                                    color: 'purple',
-                                    content: 't₆₃ (HH:mm:ss)',
-                                    rotation: 90,
-                                    yAdjust: -10
-                                }
+                annotation: {
+                    annotations: {
+                        // Linha vermelha do Setpoint
+                        setpointLine: {
+                            type: 'line',
+                            yMin: 0,
+                            yMax: 0,
+                            borderColor: 'rgb(220,53,69)',
+                            borderWidth: 2,
+                            borderDash: [6, 4],
+                            label: {
+                                enabled: true,
+                                position: 'end',
+                                backgroundColor: 'transparent',
+                                color: 'rgb(220,53,69)',
+                                content: 'Setpoint: --°C (--)',
+                                xAdjust: 0,
+                                yAdjust: -10
+                            }
+                        },
+                        // Linhas auxiliares T₆₃ (horizontal) e t₆₃ (vertical)
+                        T63_horizontal: {
+                            type: 'line',
+                            yMin: null,
+                            yMax: null,
+                            borderColor: 'purple',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            label: {
+                                enabled: true,
+                                position: 'start',
+                                backgroundColor: 'transparent',
+                                color: 'purple',
+                                content: 'T₆₃ (°C)',
+                                xAdjust: 10
+                            }
+                        },
+                        t63_vertical: {
+                            type: 'line',
+                            xMin: null,
+                            xMax: null,
+                            borderColor: 'purple',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            label: {
+                                enabled: true,
+                                position: 'end',
+                                backgroundColor: 'transparent',
+                                color: 'purple',
+                                content: 't₆₃ (HH:mm:ss)',
+                                rotation: 90,
+                                yAdjust: -10
                             }
                         }
                     }
                 }
             }
-        };
+        }
+    };
 
-        let chartHist = new Chart(ctx, configHist);
+    let chartHist = new Chart(ctx, configHist);
 
-        // ──────────────────────────────────────────────────────────
-        // 2.1) Atualizar Setpoint / Detectar Nova Alteração (a cada 30s)
-        //     – Coloca “Setpoint” e “Tipo de Malha” nos campos fixos
-        //     – Define visibilidade de divMA/divMF
-        //     – Se DtAlteracao mudou, “zeramos” as variáveis globais
-        //       (tempInicialFixa, maxTau, ganhoArmazenado, KPI/KI/KD liberados)
-        // ──────────────────────────────────────────────────────────
-        async function atualizarSetpointEConfig() {
-            try {
-                const resp = await fetch('/Alteracoes/GetUltimaAlteracao');
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const json = await resp.json();
+    // ──────────────────────────────────────────────────────────
+    // 2.1) Atualizar Setpoint / Detectar Nova Alteração (a cada 30s)
+    //     – Coloca “Setpoint” e “Tipo de Malha” nos campos fixos
+    //     – Define visibilidade de divMA/divMF
+    //     – Se DtAlteracao mudou, “zeramos” as variáveis globais
+    //       (tempInicialFixa, maxTau, ganhoArmazenado, KPI/KI/KD liberados)
+    // ──────────────────────────────────────────────────────────
+    async function atualizarSetpointEConfig() {
+        try {
+            const resp = await fetch('/Alteracoes/GetUltimaAlteracao');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const json = await resp.json();
 
-                const sp = json.setpoint;
-                const cfg = json.config; // “MA” ou “MF”
-                const dtAltUtc = json.dtAlteracao; // ISO 8601 UTC
+            const sp = json.setpoint;
+            const cfg = json.config; // “MA” ou “MF”
+            const dtAltUtc = json.dtAlteracao; // ISO 8601 UTC
 
-                // 1) Preencher Setpoint e Tipo de Malha
-                document.getElementById('txtSetpoint').value = sp.toFixed(1) + '°C';
-                document.getElementById('txtTipoMalha').value = (cfg === 'MA' ? 'Malha Aberta' : 'Malha Fechada');
+            // 1) Preencher Setpoint e Tipo de Malha
+            document.getElementById('txtSetpoint').value = sp.toFixed(1) + '°C';
+            document.getElementById('txtTipoMalha').value = (cfg === 'MA' ? 'Malha Aberta' : 'Malha Fechada');
 
-                // 2) Atualizar a linha vermelha do gráfico
-                const line = chartHist.options.plugins.annotation.annotations.setpointLine;
-                line.yMin = sp;
-                line.yMax = sp;
-                line.label.content = `Setpoint: ${sp.toFixed(1)}°C (${cfg === 'MA' ? 'MA' : 'MF'})`;
-                chartHist.update();
+            // 2) Atualizar a linha vermelha do gráfico
+            const line = chartHist.options.plugins.annotation.annotations.setpointLine;
+            line.yMin = sp;
+            line.yMax = sp;
+            line.label.content = `Setpoint: ${sp.toFixed(1)}°C (${cfg === 'MA' ? 'MA' : 'MF'})`;
+            chartHist.update();
 
-                // 3) Verificar se DtAlteracao é NOVA em relação a última vez que executamos
-                if (ultimaAlteracaoTimestamp !== dtAltUtc) {
-                    // 3.1) Toda vez que detectamos NOVA alteração:
-                    //       – resetar tempInicialFixa (será calculada 10s depois),
-                    //       – resetar maxTau, ganhoArmazenado,
-                    //       – liberar campos MA/MF para edição futura.
-                    tempInicialFixa = null;
-                    maxTau = null;
-                    ganhoArmazenado = null;
-                    currentTFinal = null;
-                    document.getElementById('txtGanhoMA').value = '';
-                    document.getElementById('txtErroEstacionario').value = '';
-                    document.getElementById('txtKpMF').disabled = false;
-                    document.getElementById('txtKiMF').disabled = false;
+            // 3) Verificar se DtAlteracao é NOVA em relação a última vez que executamos
+            if (ultimaAlteracaoTimestamp !== dtAltUtc) {
+                // 3.1) Toda vez que detectamos NOVA alteração:
+                //       – resetar tempInicialFixa (será calculada 10s depois),
+                //       – resetar maxTau, ganhoArmazenado,
+                //       – liberar campos MA/MF para edição futura.
+                tempInicialFixa = null;
+                maxTau = null;
+                ganhoArmazenado = null;
+                currentTFinal = null;
+                // RESETAR A CONFIGURAÇÃO DE MALHA FECHADA TAMBÉM:
+                savedKP = null;
+                savedKI = null;
+                isConfigLocked = false;
+                document.getElementById('txtGanhoMA').value = '';
+                document.getElementById('txtErroEstacionario').value = '';
+                document.getElementById('txtKpMF').disabled = false;
+                document.getElementById('txtKiMF').disabled = false;
+                document.getElementById('btnSalvarConfigMF').style.display = 'inline-block';
+                document.getElementById('btnMudarConfigMF').style.display = 'none';
 
-                    // guardar timestamp da alteração para comparações futuras
-                    ultimaAlteracaoTimestamp = dtAltUtc;
-                }
-
-                // 4) Exibir ou ocultar seção MA / MF
-                if (cfg === 'MA') {
-                    document.getElementById('divMA').style.display = 'block';
-                    document.getElementById('divMF_Parametros').style.display = 'none';
-                } else {
-                    document.getElementById('divMA').style.display = 'none';
-                    document.getElementById('divMF_Parametros').style.display = 'block';
-                }
+                // guardar timestamp da alteração para comparações futuras
+                ultimaAlteracaoTimestamp = dtAltUtc;
             }
-            catch (e) {
-                console.error('[Setpoint] ', e);
+
+            // 4) Exibir ou ocultar seção MA / MF
+            if (cfg === 'MA') {
+                document.getElementById('divMA').style.display = 'block';
+                document.getElementById('divMF_Parametros').style.display = 'none';
+            } else {
+                document.getElementById('divMA').style.display = 'none';
+                document.getElementById('divMF_Parametros').style.display = 'block';
+            }
+
+            // SE É MALHA FECHADA, GARANTIR BOTÃO “Mudar configuração” OCULTO inicialmente
+            if (cfg === 'MF' && !isConfigLocked) {
+                document.getElementById('btnMudarConfigMF').style.display = 'none';
+                document.getElementById('btnSalvarConfigMF').style.display = 'inline-block';
             }
         }
-        atualizarSetpointEConfig();
-        setInterval(atualizarSetpointEConfig, 30000);
+        catch (e) {
+            console.error('[Setpoint] ', e);
+        }
+    }
+    atualizarSetpointEConfig();
+    setInterval(atualizarSetpointEConfig, 30000);
 
-        // ──────────────────────────────────────────────────────────
-        // 2.2) Atualiza histórico + cálculos (a cada 1 segundo)
-        //
-        //   – GUARDA “T_inicial” como PRIMEIRA leitura a partir de
-        //     “DtAlteracao + 10s” e, após calculada, NÃO MAIS ALTERA.
-        //   – Em cada execução, calcula T_final = máximo do array.
-        //   – target63 = Math.ceil(T₀ + 0,632·(T_f − T₀)).
-        //   – Encontra t₆₃ = instante de primeira leitura ≥ target63.
-        //   – τ = t₆₃ – t₀, mas guardamos apenas o MAIOR τ já visto (maxTau).
-        //   – Desenha T₆₃ (linha horizontal) e t₆₃ (linha vertical).
-        //   – Em MA, recalcula ganho sempre: K(MA) = (T_final – T₀)/(V_final – V₀),
-        //     onde V = (T – intercept)/slope/100.
-        //   – Em MF, recolhe T_final (em currentTFinal) só para cálculo do erro
-        //     estacionário, mas NÃO recalcula ganhoMA.
-        // ──────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────
+    // 2.2) Atualiza histórico + cálculos (a cada 1 segundo)
+    //
+    //   – GUARDA “T_inicial” como PRIMEIRA leitura a partir de
+    //     “DtAlteracao + 10s” e, após calculada, NÃO MAIS ALTERA.
+    //   – Em cada execução, calcula T_final = máximo do array.
+    //   – target63 = Math.ceil(T₀ + 0,632·(T_f − T₀)).
+    //   – Encontra t₆₃ = instante de primeira leitura ≥ target63.
+    //   – τ = t₆₃ – t₀, mas guardamos apenas o MAIOR τ já visto (maxTau).
+    //   – Desenha T₆₃ (linha horizontal) e t₆₃ (linha vertical).
+    //   – Em MA, recalcula ganho sempre: K(MA) = (T_final – T₀)/(V_final – V₀),
+    //     onde V = (T – intercept)/slope/100.
+    //   – Em MF, recalcula erro estacionário continuamente se KP estiver salvo.
+    // ──────────────────────────────────────────────────────────
 
-        // Coeficientes de regressão para converter temperatura → tensão
-        const intercept = 0.0128243214239063;
-        const slope = 0.0980856212904494;
+    // Coeficientes de regressão para converter temperatura → tensão
+    const intercept = 0.0128243214239063;
+    const slope = 0.0980856212904494;
 
-        async function atualizarHistoricoInterval() {
-            try {
-                const resp = await fetch('/Home/GetTemperatureHistoryFromLastAlteracao');
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const json = await resp.json();
+    async function atualizarHistoricoInterval() {
+        try {
+            const resp = await fetch('/Home/GetTemperatureHistoryFromLastAlteracao');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const json = await resp.json();
 
-                // 1) Extrair valores do JSON do STH‐Comet:
-                const arrayValores = json.contextResponses[0]
-                    .contextElement
-                    .attributes[0]
-                    .values || [];
+            // 1) Extrair valores do JSON do STH‐Comet:
+            const arrayValores = json.contextResponses[0]
+                .contextElement
+                .attributes[0]
+                .values || [];
 
-                // 2) Ordenar cronologicamente:
-                arrayValores.sort((a, b) => new Date(a.recvTime) - new Date(b.recvTime));
+            // 2) Ordenar cronologicamente:
+            arrayValores.sort((a, b) => new Date(a.recvTime) - new Date(b.recvTime));
 
-                // 3) Se NÃO vier leitura, limpar tudo e sair:
-                if (!arrayValores.length) {
-                    dadosHist.labels = [];
-                    dadosHist.datasets[0].data = [];
-                    chartHist.update();
-
-                    document.getElementById('corpoTabelaLeituras').innerHTML = "";
-                    // NÃO limpamos tempInicialFixa (já está definido após +10s), mas limpamos a visualização:
-                    document.getElementById('txtTempInicial').value = '';
-                    document.getElementById('txtConstTempo').value = '';
-                    return;
-                }
-
-                // 4) Definir T_inicial: se ainda NÃO definimos, aguardamos até ter pelo menos 1 ponto com recvTime ≥ DtAlteracao+10s.
-                if (tempInicialFixa === null) {
-                    // “DtAlteracao” foi gravada em últimaAlteracaoTimestamp por atualizarSetpointEConfig().
-                    // Vamos comparar cada ponto: se ponto.recvTime UTC ≥ (DtAlteracaoUTC + 10s), então usamos attrValue.
-                    const dtAltMoment = moment(ultimaAlteracaoTimestamp).toDate(); // momento da alteração em UTC
-                    const dtLimite = moment(dtAltMoment).add(10, 'seconds');
-
-                    // procurar primeiro item cujo recvTime ≥ dtLimite
-                    for (let pt of arrayValores) {
-                        const recv = moment(pt.recvTime);
-                        if (recv.isSameOrAfter(dtLimite)) {
-                            tempInicialFixa = pt.attrValue;
-                            break;
-                        }
-                    }
-                }
-
-                // Se depois desse trecho ainda tempInicialFixa for null, significa que ainda não passaram 10s → não calculamos nada, apenas populamos gráfico e tabela e voltamos.
-                if (tempInicialFixa === null) {
-                    // Ainda não chegou o momento “+10s”, então apenas preencher tabela e gráfico sem cálculos de TAU ou ganho:
-                    preencherGraficoETabelaSomenteLeituras(arrayValores);
-                    return;
-                }
-
-                // 5) Agora que tempInicialFixa foi definido, não alteramos mais.
-                //    Exibir em “Temp. Inicial”
-                document.getElementById('txtTempInicial').value = tempInicialFixa.toFixed(1) + '°C';
-
-                // 6) Calcular T_final = máximo de todas as leituras
-                const T_final = Math.max(...arrayValores.map(pt => pt.attrValue));
-                currentTFinal = T_final; // guardamos para MF
-
-                // 7) Cálculo de target63 (arredondado para cima):
-                const deltaTotal = T_final - tempInicialFixa;
-                const target63 = Math.ceil(tempInicialFixa + 0.632 * deltaTotal);
-
-                // 8) Encontrar índice de t₀ (onde attrValue == T_inicialFixa e recvTime ≥ DtAlteracao+10s)
-                //    Já sabemos qual foi o primeiro valor ≥ DtAlteracao+10s que deu T_inicialFixa, mas podemos buscar de novo:
-                const idxInicial = arrayValores.findIndex(pt => pt.attrValue === tempInicialFixa &&
-                    moment(pt.recvTime).isSameOrAfter(moment(ultimaAlteracaoTimestamp).add(2.5, 'seconds'))
-                );
-                const t0 = idxInicial >= 0
-                    ? moment(arrayValores[idxInicial].recvTime)
-                    : null;
-
-                // 9) Encontrar t₆₃: primeiro ponto cujo attrValue ≥ target63
-                let tauSegundos = null;
-                let t63Date = null;
-                if (t0) {
-                    for (let item of arrayValores) {
-                        if (item.attrValue >= target63) {
-                            const t1 = moment(item.recvTime);
-                            tauSegundos = t1.diff(t0, 'seconds', true);
-                            t63Date = moment(item.recvTime).utcOffset(-180).toDate();
-                            break;
-                        }
-                    }
-                }
-
-                // 10) Atualizar maxTau se τ calculado for maior:
-                if (tauSegundos !== null && (maxTau === null || tauSegundos > maxTau)) {
-                    maxTau = tauSegundos;
-                }
-
-                // 11) Exibir o maior τ até agora:
-                if (maxTau !== null) {
-                    document.getElementById('txtConstTempo').value = maxTau.toFixed(1) + ' s';
-                } else {
-                    document.getElementById('txtConstTempo').value = '--';
-                }
-
-                // 12) Verificar tipo de malha e calcular Ganho (MA) toda vez:
-                const tipoMalha = document.getElementById('txtTipoMalha').value;
-                if (tipoMalha === 'Malha Aberta') {
-                    // Em MA, sempre recalcular: K(MA) = (T_final − T_inicialFixa)/(V_final − V_inicial)
-                    const V_inicial = (tempInicialFixa - intercept) / slope / 100;
-                    const V_final = (T_final - intercept) / slope / 100;
-                    const deltaV = V_final - V_inicial;
-                    const deltaT = T_final - tempInicialFixa;
-                    if (deltaV !== 0) {
-                        ganhoArmazenado = deltaT / deltaV;
-                        document.getElementById('txtGanhoMA').value = ganhoArmazenado.toFixed(3);
-                    } else {
-                        document.getElementById('txtGanhoMA').value = '--';
-                    }
-                } else {
-                    // Em MF não mostramos GanhoMA
-                    document.getElementById('txtGanhoMA').value = '';
-                }
-
-                // 13) Limpar gráfico e tabela para refazer preenchimento
+            // 3) Se NÃO vier leitura, limpar tudo e sair:
+            if (!arrayValores.length) {
                 dadosHist.labels = [];
                 dadosHist.datasets[0].data = [];
-                const tabela = document.getElementById('corpoTabelaLeituras');
-                tabela.innerHTML = "";
-
-                // 14) Preencher gráfico e tabela
-                arrayValores.forEach(item => {
-                    const timeUtc = item.recvTime;   // ex: "2025-06-01T17:31:00.123Z"
-                    const tempC = item.attrValue;  // ex: 29.5°
-
-                    // 14a) Converter UTC → BR e formatar “DD/MM/YYYY - HH:mm:ss”
-                    const localBR = moment(timeUtc).utcOffset(-180).format('DD/MM/YYYY - HH:mm:ss');
-                    const dateObj = moment(timeUtc).utcOffset(-180).toDate();
-
-                    // 14b) Calcular tensão (0–10 V), mantendo “/100”
-                    let tensao = (tempC - intercept) / slope / 100;
-                    tensao = parseFloat(tensao.toFixed(3));
-
-                    // 14c) Preencher Tabela (inserir no topo)
-                    const tr = document.createElement('tr');
-                    const td1 = document.createElement('td'); td1.textContent = localBR;
-                    const td2 = document.createElement('td'); td2.textContent = tempC.toFixed(1);
-                    const td3 = document.createElement('td'); td3.textContent = tensao.toFixed(3);
-                    tr.append(td1, td2, td3);
-                    tabela.insertBefore(tr, tabela.firstChild);
-
-                    // 14d) Preencher Gráfico (só temperatura)
-                    dadosHist.labels.push(dateObj);
-                    dadosHist.datasets[0].data.push(tempC);
-                });
-
-                // 15) Desenhar linhas T₆₃ e t₆₃
-                if (t63Date && target63 !== null) {
-                    const ann = chartHist.options.plugins.annotation.annotations;
-
-                    // – Linha horizontal em y = target63 (T₆₃)
-                    ann.T63_horizontal.yMin = target63;
-                    ann.T63_horizontal.yMax = target63;
-                    ann.T63_horizontal.label.content = `T₆₃ = ${target63}°C`;
-                    ann.T63_horizontal.label.xAdjust = 0;
-                    ann.T63_horizontal.label.yAdjust = -10;
-
-                    // – Linha vertical em x = t63Date (t₆₃)
-                    ann.t63_vertical.xMin = t63Date;
-                    ann.t63_vertical.xMax = t63Date;
-                    ann.t63_vertical.label.content = `t₆₃ = ${moment(t63Date).format('HH:mm:ss')}`;
-                    ann.t63_vertical.label.xAdjust = 10;
-                    ann.t63_vertical.label.yAdjust = -10;
-                }
-
-                // 16) “Repetir” último valor no gráfico até o momento atual
-                if (dadosHist.labels.length > 0) {
-                    const lastValue = dadosHist.datasets[0].data.at(-1);
-                    const nowBR = moment().utcOffset(-180).toDate();
-                    dadosHist.labels.push(nowBR);
-                    dadosHist.datasets[0].data.push(lastValue);
-
-                    // Ajustar min/max eixo X
-                    const firstDate = dadosHist.labels[0];
-                    chartHist.options.scales.x.min = firstDate;
-                    chartHist.options.scales.x.max = nowBR;
-                }
-
-                // 17) Atualizar o gráfico
                 chartHist.update();
+
+                document.getElementById('corpoTabelaLeituras').innerHTML = "";
+                // NÃO limpamos tempInicialFixa (já está definido após +10s), mas limpamos a visualização:
+                document.getElementById('txtTempInicial').value = '';
+                document.getElementById('txtConstTempo').value = '';
+                // Limpar erro estacionário se estiver em MF
+                document.getElementById('txtErroEstacionario').value = '';
+                return;
             }
-            catch (err) {
-                console.error('[Histórico] ', err);
+
+            // 4) Definir T_inicial: se ainda NÃO definimos, aguardamos até ter pelo menos 1 ponto com recvTime ≥ DtAlteracao+10s.
+            if (tempInicialFixa === null) {
+                // “DtAlteracao” foi gravada em ultimaAlteracaoTimestamp por atualizarSetpointEConfig().
+                // Vamos comparar cada ponto: se ponto.recvTime UTC ≥ (DtAlteracaoUTC + 10s), então usamos attrValue.
+                const dtAltMoment = moment(ultimaAlteracaoTimestamp).toDate(); // momento da alteração em UTC
+                const dtLimite = moment(dtAltMoment).add(10, 'seconds');
+
+                // procurar primeiro item cujo recvTime ≥ dtLimite
+                for (let pt of arrayValores) {
+                    const recv = moment(pt.recvTime);
+                    if (recv.isSameOrAfter(dtLimite)) {
+                        tempInicialFixa = pt.attrValue;
+                        break;
+                    }
+                }
             }
-        }
-        atualizarHistoricoInterval();
-        setInterval(atualizarHistoricoInterval, 1000);
 
-        // ──────────────────────────────────────────────────────────
-        // 3) Malha Fechada: Listener para “Salvar Configuração”
-        //    – Só depois que o usuário clicar, calcular o Erro Estacionário
-        //      = (Setpoint – T_final) × KP, e travar KP/KI até próxima alteração.
-        // ──────────────────────────────────────────────────────────
-        document.getElementById('btnSalvarConfigMF').addEventListener('click', function () {
-            const kpText = document.getElementById('txtKpMF').value;
-            const kp = parseFloat(kpText);
-            const kiText = document.getElementById('txtKiMF').value;
-            const ki = parseFloat(kiText);
-            const spText = document.getElementById('txtSetpoint').value;
-            const sp = parseFloat(spText);
+            // Se depois desse trecho ainda tempInicialFixa for null, significa que ainda não passaram 10s → não calculamos nada, apenas populamos gráfico e tabela e voltamos.
+            if (tempInicialFixa === null) {
+                // Ainda não chegou o momento “+10s”, então apenas preencher tabela e gráfico sem cálculos de TAU ou ganho:
+                preencherGraficoETabelaSomenteLeituras(arrayValores);
+                return;
+            }
 
-            // Validação mínima: KP deve ser número válido e currentTFinal já definido
-            if (!isNaN(kp) && currentTFinal !== null && !isNaN(sp)) {
-                // Erro estacionário: (SP − T_final) × KP
-                const erroEst = (sp - currentTFinal) * kp;
-                document.getElementById('txtErroEstacionario').value = erroEst.toFixed(1) + '°C';
+            // 5) Agora que tempInicialFixa foi definido, não alteramos mais.
+            //    Exibir em “Temp. Inicial”
+            document.getElementById('txtTempInicial').value = tempInicialFixa.toFixed(1) + '°C';
 
-                // Travar KP e KI (já que usuário acabou de “salvar” a configuração)
-                document.getElementById('txtKpMF').disabled = true;
-                document.getElementById('txtKiMF').disabled = true;
+            // 6) Calcular T_final = máximo de todas as leituras
+            const T_final = Math.max(...arrayValores.map(pt => pt.attrValue));
+            currentTFinal = T_final; // guardamos para MF
+
+            // 7) Cálculo de target63 (arredondado para cima):
+            const deltaTotal = T_final - tempInicialFixa;
+            const target63 = Math.ceil(tempInicialFixa + 0.632 * deltaTotal);
+
+            // 8) Encontrar índice de t₀ (onde attrValue == T_inicialFixa e recvTime ≥ DtAlteracao+10s)
+            //    Já sabemos qual foi o primeiro valor ≥ DtAlteracao+10s que deu T_inicialFixa, mas podemos buscar de novo:
+            const idxInicial = arrayValores.findIndex(pt => pt.attrValue === tempInicialFixa &&
+                moment(pt.recvTime).isSameOrAfter(moment(ultimaAlteracaoTimestamp).add(2.5, 'seconds'))
+            );
+            const t0 = idxInicial >= 0
+                ? moment(arrayValores[idxInicial].recvTime)
+                : null;
+
+            // 9) Encontrar t₆₃: primeiro ponto cujo attrValue ≥ target63
+            let tauSegundos = null;
+            let t63Date = null;
+            if (t0) {
+                for (let item of arrayValores) {
+                    if (item.attrValue >= target63) {
+                        const t1 = moment(item.recvTime);
+                        tauSegundos = t1.diff(t0, 'seconds', true);
+                        t63Date = moment(item.recvTime).utcOffset(-180).toDate();
+                        break;
+                    }
+                }
+            }
+
+            // 10) Atualizar maxTau se τ calculado for maior:
+            if (tauSegundos !== null && (maxTau === null || tauSegundos > maxTau)) {
+                maxTau = tauSegundos;
+            }
+
+            // 11) Exibir o maior τ até agora:
+            if (maxTau !== null) {
+                document.getElementById('txtConstTempo').value = maxTau.toFixed(1) + ' s';
             } else {
-                // Se kp inválido ou currentTFinal ainda não calculado, não calcular
-                alert("Informe um valor válido de KP e aguarde o T_final ser calculado.");
+                document.getElementById('txtConstTempo').value = '--';
             }
-        });
 
-        // Atualização dinâmica do erro estacionário ao digitar KP
-        document.getElementById('txtKpMF').addEventListener('input', function () {
+            // 12) Verificar tipo de malha e calcular Ganho (MA) toda vez:
+            const tipoMalha = document.getElementById('txtTipoMalha').value;
+            if (tipoMalha === 'Malha Aberta') {
+                // Em MA, sempre recalcular: K(MA) = (T_final − T_inicialFixa)/(V_final − V_inicial)
+                const V_inicial = (tempInicialFixa - intercept) / slope / 100;
+                const V_final = (T_final - intercept) / slope / 100;
+                const deltaV = V_final - V_inicial;
+                const deltaT = T_final - tempInicialFixa;
+                if (deltaV !== 0) {
+                    ganhoArmazenado = deltaT / deltaV;
+                    document.getElementById('txtGanhoMA').value = ganhoArmazenado.toFixed(3);
+                } else {
+                    document.getElementById('txtGanhoMA').value = '--';
+                }
+                // Limpar erro estacionário se houver
+                document.getElementById('txtErroEstacionario').value = '';
+            } else {
+                // Em MF, recalcular erro estacionário continuamente se KP estiver salvo
+                if (isConfigLocked && savedKP !== null && currentTFinal !== null) {
+                    const spText = document.getElementById('txtSetpoint').value;
+                    const sp = parseFloat(spText);
+                    if (!isNaN(sp)) {
+                        const erroEst = (sp - currentTFinal) * savedKP;
+                        document.getElementById('txtErroEstacionario').value = erroEst.toFixed(1) + '°C';
+                    }
+                }
+            }
+
+            // 13) Limpar gráfico e tabela para refazer preenchimento
+            dadosHist.labels = [];
+            dadosHist.datasets[0].data = [];
+            const tabela = document.getElementById('corpoTabelaLeituras');
+            tabela.innerHTML = "";
+
+            // 14) Preencher gráfico e tabela
+            arrayValores.forEach(item => {
+                const timeUtc = item.recvTime;   // ex: "2025-06-01T17:31:00.123Z"
+                const tempC = item.attrValue;    // ex: 29.5°
+
+                // 14a) Converter UTC → BR e formatar “DD/MM/YYYY - HH:mm:ss”
+                const localBR = moment(timeUtc).utcOffset(-180).format('DD/MM/YYYY - HH:mm:ss');
+                const dateObj = moment(timeUtc).utcOffset(-180).toDate();
+
+                // 14b) Calcular tensão (0–10 V), mantendo “/100”
+                let tensao = (tempC - intercept) / slope / 100;
+                tensao = parseFloat(tensao.toFixed(3));
+
+                // 14c) Preencher Tabela (inserir no topo)
+                const tr = document.createElement('tr');
+                const td1 = document.createElement('td'); td1.textContent = localBR;
+                const td2 = document.createElement('td'); td2.textContent = tempC.toFixed(1);
+                const td3 = document.createElement('td'); td3.textContent = tensao.toFixed(3);
+                tr.append(td1, td2, td3);
+                tabela.insertBefore(tr, tabela.firstChild);
+
+                // 14d) Preencher Gráfico (só temperatura)
+                dadosHist.labels.push(dateObj);
+                dadosHist.datasets[0].data.push(tempC);
+            });
+
+            // 15) Desenhar linhas T₆₃ e t₆₃
+            if (t63Date && target63 !== null) {
+                const ann = chartHist.options.plugins.annotation.annotations;
+
+                // – Linha horizontal em y = target63 (T₆₃)
+                ann.T63_horizontal.yMin = target63;
+                ann.T63_horizontal.yMax = target63;
+                ann.T63_horizontal.label.content = `T₆₃ = ${target63}°C`;
+                ann.T63_horizontal.label.xAdjust = 0;
+                ann.T63_horizontal.label.yAdjust = -10;
+
+                // – Linha vertical em x = t63Date (t₆₃)
+                ann.t63_vertical.xMin = t63Date;
+                ann.t63_vertical.xMax = t63Date;
+                ann.t63_vertical.label.content = `t₆₃ = ${moment(t63Date).format('HH:mm:ss')}`;
+                ann.t63_vertical.label.xAdjust = 10;
+                ann.t63_vertical.label.yAdjust = -10;
+            }
+
+            // 16) “Repetir” último valor no gráfico até o momento atual
+            if (dadosHist.labels.length > 0) {
+                const lastValue = dadosHist.datasets[0].data.at(-1);
+                const nowBR = moment().utcOffset(-180).toDate();
+                dadosHist.labels.push(nowBR);
+                dadosHist.datasets[0].data.push(lastValue);
+
+                // Ajustar min/max eixo X
+                const firstDate = dadosHist.labels[0];
+                chartHist.options.scales.x.min = firstDate;
+                chartHist.options.scales.x.max = nowBR;
+            }
+
+            // 17) Atualizar o gráfico
+            chartHist.update();
+        }
+        catch (err) {
+            console.error('[Histórico] ', err);
+        }
+    }
+    atualizarHistoricoInterval();
+    setInterval(atualizarHistoricoInterval, 1000);
+
+    // ──────────────────────────────────────────────────────────
+    // 3) Malha Fechada: Listeners para “Salvar Configuração” e “Mudar Configuração”
+    //    – Ao clicar “Salvar Configuração”:
+    //        • Salva KP e KI em variáveis (savedKP/savedKI)
+    //        • Bloqueia inputs (txtKpMF, txtKiMF)
+    //        • Exibe botão “Mudar Configuração” e esconde “Salvar Configuração”
+    //        • Calcula erro estacionário uma vez imediatamente
+    //    – Ao clicar “Mudar Configuração”:
+    //        • Limpa savedKP e savedKI, desbloqueia inputs
+    //        • Exibe “Salvar Configuração” e esconde “Mudar Configuração”
+    //    – Enquanto KP estiver salvo (isConfigLocked === true), recalcular erro a cada atualização de histórico
+    // ──────────────────────────────────────────────────────────
+
+    // Esconder botão “Mudar Configuração” inicialmente (assumindo que exista no HTML: <button id="btnMudarConfigMF">Mudar configuração</button>)
+    document.addEventListener('DOMContentLoaded', function () {
+        const btnMudar = document.getElementById('btnMudarConfigMF');
+        if (btnMudar) {
+            btnMudar.style.display = 'none';
+        }
+    });
+
+    // Listener para “Salvar Configuração” (já existente, mas ajustado)
+    document.getElementById('btnSalvarConfigMF').addEventListener('click', function () {
+        const kpText = document.getElementById('txtKpMF').value;
+        const kp = parseFloat(kpText);
+        const kiText = document.getElementById('txtKiMF').value;
+        const ki = parseFloat(kiText);
+        const spText = document.getElementById('txtSetpoint').value;
+        const sp = parseFloat(spText);
+
+        // Validação mínima: KP deve ser número válido e currentTFinal já definido
+        if (!isNaN(kp) && currentTFinal !== null && !isNaN(sp)) {
+            // Salvar valores em variáveis globais
+            savedKP = kp;
+            savedKI = isNaN(ki) ? null : ki;
+            isConfigLocked = true;
+
+            // Calcular erro estacionário imediatamente
+            const erroEst = (sp - currentTFinal) * savedKP;
+            document.getElementById('txtErroEstacionario').value = erroEst.toFixed(1) + '°C';
+
+            // Travar KP e KI (já que usuário acabou de “salvar” a configuração)
+            document.getElementById('txtKpMF').disabled = true;
+            document.getElementById('txtKiMF').disabled = true;
+
+            // Alternar visibilidade dos botões
+            document.getElementById('btnSalvarConfigMF').style.display = 'none';
+            document.getElementById('btnMudarConfigMF').style.display = 'inline-block';
+        } else {
+            alert("Informe um valor válido de KP e aguarde o T_final ser calculado.");
+        }
+    });
+
+    // Listener para “Mudar Configuração” (novo botão)
+    document.getElementById('btnMudarConfigMF').addEventListener('click', function () {
+        // Limpar valores salvos
+        savedKP = null;
+        savedKI = null;
+        isConfigLocked = false;
+
+        // Desbloquear inputs de KP e KI
+        document.getElementById('txtKpMF').disabled = false;
+        document.getElementById('txtKiMF').disabled = false;
+
+        // Limpar campo de erro estacionário
+        document.getElementById('txtErroEstacionario').value = '';
+
+        // Alternar visibilidade dos botões
+        document.getElementById('btnMudarConfigMF').style.display = 'none';
+        document.getElementById('btnSalvarConfigMF').style.display = 'inline-block';
+    });
+
+    // Atualização dinâmica do erro estacionário ao digitar KP (permanece para feedback imediato quando não bloqueado)
+    document.getElementById('txtKpMF').addEventListener('input', function () {
+        // Só recalcular se ainda não estiver bloqueado
+        if (!isConfigLocked) {
             const kp = parseFloat(this.value);
             const sp = parseFloat(document.getElementById('txtSetpoint').value);
             if (!isNaN(kp) && currentTFinal !== null && !isNaN(sp)) {
@@ -786,7 +862,7 @@ else
             } else {
                 document.getElementById('txtErroEstacionario').value = '';
             }
-        });
-
-    </script>
+        }
+    });
+</script>
 }
